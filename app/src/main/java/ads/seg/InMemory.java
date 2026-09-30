@@ -5,19 +5,16 @@ import java.util.Map;
 
 public class InMemory implements UserRepository {
 
-    private Map<String, String> repository = new HashMap<>();
-
-    public Map<String, String> getRepository() {
-        return repository;
-    }
-
-    public void setRepository(Map<String, String> repository) {
-        this.repository = repository;
-    }
+    private Map<String, User> repository = new HashMap<>();
 
     @Override
     public boolean save(User user) {
-        return false;
+        if (findByLogin(user.getLogin()) != null) {
+            return false;
+        } else {
+            repository.put(user.getLogin(), user);
+            return true;
+        }
     }
 
     @Override
@@ -27,6 +24,8 @@ public class InMemory implements UserRepository {
 
     @Override
     public User findByLogin(String login) {
-        return null;
+
+        return this.repository.get(login);
+
     }
 }

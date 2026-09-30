@@ -7,7 +7,7 @@ import module java.base; // requer java 25
  * Classe principal para testar a classe PasswordHashing com diferentes
  * algoritmos de hash.
  */
-public class App {
+public class AppReferencia {
     /**
      * Classe interna para armazenar os resultados do hash, incluindo o nome do
      * algoritmo, o tempo de execução em nanossegundos e o hash da senha em base64
@@ -92,7 +92,7 @@ public class App {
 
     public static void main(String[] args) throws IOException {
         java.util.Locale.setDefault(java.util.Locale.of("pt", "BR"));
-        App app = new App();
+        AppReferencia app = new AppReferencia();
         // Gerando os hashes e medindo o tempo de execução para cada algoritmo
         try {
             app.generateHashs();

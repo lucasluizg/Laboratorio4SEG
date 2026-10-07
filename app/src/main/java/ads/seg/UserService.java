@@ -4,17 +4,19 @@ import ads.seg.exceptions.InvalidLoginException;
 import ads.seg.exceptions.InvalidPasswordException;
 import ads.seg.exceptions.UserAlreadyExistsException;
 import ads.seg.exceptions.UserNotFoundException;
-
-import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
-
+import java.util.Base64;
 
 public class UserService {
 
     private UserRepository repository = new InMemory();
     private static final SecureRandom S_RANDOM = new SecureRandom();
+    private int iterations = 600000;
+    private int keyLength = 128;
+    private Base64.Encoder encoder = Base64.getEncoder();
+    private Base64.Decoder decoder = Base64.getDecoder();
 
     public boolean register(String login, String password) throws UserAlreadyExistsException, NoSuchAlgorithmException, InvalidKeySpecException {
         if (repository.findByLogin(login) != null) {
@@ -28,45 +30,43 @@ public class UserService {
             byte[] hashedPassword = PasswordHashing.hashPasswordWithPBKDF2(passwordChar, salt, "PBKDF2WithHmacSHA512", iterations,
                     keyLength);
 
-            // Concatena o salt e o hashedPassword em um único array byte passwordByte
-            byte[] passwordByte = new byte[salt.length + hashedPassword.length];
-            System.arraycopy(salt, 0, passwordByte, 0, salt.length);
-            System.arraycopy(hashedPassword, 0, passwordByte, salt.length, hashedPassword.length);
-
-            // Falta colocar o $ para separar o salt e o hashedPassword.
-
-            // O password recebe o passwordByte com o salt e o hashedPassword.
-            password = new String(passwordByte, StandardCharsets.UTF_8);
+            // Concatena o salt e o hashedPassword em um único String convertendo pra String.
+            String saltBase64 = encoder.encodeToString(salt);
+            String hashedBase64 = encoder.encodeToString(hashedPassword != null ? hashedPassword : new byte[0]);
+            // O password recebe o salt mais o cifrão mais o hashedPassword concatenados convertidos em base 64.
+            password = saltBase64 + '$' + hashedBase64;
             User user = new User(login, password);
             repository.save(user);
             return true;
         }
     }
 
-    public boolean updatePassword(String login, String oldPassword, String newPassword) throws UserNotFoundException, InvalidPasswordException {
-        if (repository.findByLogin(login) == null) {
+    public boolean updatePassword(String login, String oldPassword, String newPassword) throws UserNotFoundException, InvalidPasswordException, UserAlreadyExistsException, NoSuchAlgorithmException, InvalidKeySpecException {
+        User user = repository.findByLogin(login);
+        if (user == null) {
             throw new UserNotFoundException("O usuário não foi encontrado!");
         } else {
-            User user = repository.findByLogin(login);
-            if (!oldPassword.equals(user.getPassword())) {
-                throw new InvalidPasswordException("A senha está equivocada!");
-            } else {
+            if (authenticate(login, oldPassword)) {
+                // TODO Converter newPassword para Hash.
                 user.setPassword(newPassword);
-                return true;
+                repository.update(user);
             }
         }
+        return false;
     }
 
     public boolean authenticate(String login, String password) throws NoSuchAlgorithmException, InvalidKeySpecException {
-        if (repository.findByLogin(login) == null) {
+        User user = repository.findByLogin(login);
+        if (user == null) {
             throw new InvalidLoginException("O login ou a senha estão equivocados!");
         } else {
-            User user = repository.findByLogin(login);
-            if (!user.getPassword().equals(login)) {
-                throw new InvalidLoginException("O login ou a senha estão equivocados!");
-            } else {
-                return true;
-            }
+            String[] sp = user.getPassword().split("\\$");
+
+            byte[] hashedPassword = decoder.decode(sp[1]);
+            byte[] salt = decoder.decode(sp[0]);
+            char[] passwordChar = password.toCharArray();
+
+            return PasswordHashing.verifyPasswordWithPBKDF2(passwordChar, salt, "PBKDF2WithHmacSHA512", iterations, keyLength, hashedPassword);
         }
     }
 

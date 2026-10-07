@@ -19,7 +19,12 @@ public class InMemory implements UserRepository {
 
     @Override
     public boolean update(User user) {
-        return false;
+        if (findByLogin(user.getLogin()) != null) {
+            repository.put(user.getLogin(), user);
+            return true;
+        } else {
+            return false;
+        }
     }
 
     @Override

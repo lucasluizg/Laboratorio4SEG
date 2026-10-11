@@ -11,6 +11,7 @@ plugins {
     id("io.spring.dependency-management") version "1.1.7"
 }
 
+
 repositories {
     // Use Maven Central for resolving dependencies.
     mavenCentral()

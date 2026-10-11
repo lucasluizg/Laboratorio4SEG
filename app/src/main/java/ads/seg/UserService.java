@@ -17,28 +17,43 @@ public class UserService {
     private int keyLength = 128;
     private Base64.Encoder encoder = Base64.getEncoder();
     private Base64.Decoder decoder = Base64.getDecoder();
+    private String criptografia;
+
+    public UserService(String criptografia) {
+        this.criptografia = criptografia;
+    }
 
     public boolean register(String login, String password) throws UserAlreadyExistsException, NoSuchAlgorithmException, InvalidKeySpecException {
         if (repository.findByLogin(login) != null) {
             throw new UserAlreadyExistsException("O usuário já existe no banco de dados!");
         } else {
-            byte[] salt = new byte[16];
-            S_RANDOM.nextBytes(salt);
-            int iterations = 600000;
-            int keyLength = 128;
-            char[] passwordChar = password.toCharArray();
-            byte[] hashedPassword = PasswordHashing.hashPasswordWithPBKDF2(passwordChar, salt, "PBKDF2WithHmacSHA512", iterations,
-                    keyLength);
+            if (criptografia.equalsIgnoreCase("PBKDF2")) {
+                byte[] salt = new byte[16];
+                S_RANDOM.nextBytes(salt);
+                int iterations = 600000;
+                int keyLength = 128;
+                char[] passwordChar = password.toCharArray();
+                byte[] hashedPassword = PasswordHashing.hashPasswordWithPBKDF2(passwordChar, salt, "PBKDF2WithHmacSHA512", iterations,
+                        keyLength);
 
-            // Concatena o salt e o hashedPassword em um único String convertendo pra String.
-            String saltBase64 = encoder.encodeToString(salt);
-            String hashedBase64 = encoder.encodeToString(hashedPassword != null ? hashedPassword : new byte[0]);
-            // O password recebe o salt mais o cifrão mais o hashedPassword concatenados convertidos em base 64.
-            password = saltBase64 + '$' + hashedBase64;
-            User user = new User(login, password);
-            repository.save(user);
-            return true;
+                // Concatena o salt e o hashedPassword em um único String convertendo pra String.
+                String saltBase64 = encoder.encodeToString(salt);
+                String hashedBase64 = encoder.encodeToString(hashedPassword != null ? hashedPassword : new byte[0]);
+                // O password recebe o salt mais o cifrão mais o hashedPassword concatenados convertidos em base 64.
+                password = saltBase64 + '$' + hashedBase64;
+                User user = new User(login, password);
+                repository.save(user);
+                return true;
+            } else if (criptografia.equalsIgnoreCase("BCrypt")) {
+                char[] passwordChar = password.toCharArray();
+                byte[] hashedPassword = PasswordHashing.hashPasswordWithBCrypt(passwordChar);
+                password = encoder.encodeToString(hashedPassword);
+                User user = new User(login, password);
+                repository.save(user);
+                return true;
+            }
         }
+        return false;
     }
 
     public boolean updatePassword(String login, String oldPassword, String newPassword) throws UserNotFoundException, InvalidPasswordException, UserAlreadyExistsException, NoSuchAlgorithmException, InvalidKeySpecException {
@@ -48,8 +63,31 @@ public class UserService {
         } else {
             if (authenticate(login, oldPassword)) {
                 // TODO Converter newPassword para Hash.
-                user.setPassword(newPassword);
-                repository.update(user);
+                if (criptografia.equalsIgnoreCase("PBKDF2")) {
+                    byte[] salt = new byte[16];
+                    S_RANDOM.nextBytes(salt);
+                    int iterations = 600000;
+                    int keyLength = 128;
+                    char[] passwordChar = newPassword.toCharArray();
+                    byte[] hashedPassword = PasswordHashing.hashPasswordWithPBKDF2(passwordChar, salt, "PBKDF2WithHmacSHA512", iterations,
+                            keyLength);
+
+                    // Concatena o salt e o hashedPassword em um único String convertendo pra String.
+                    String saltBase64 = encoder.encodeToString(salt);
+                    String hashedBase64 = encoder.encodeToString(hashedPassword != null ? hashedPassword : new byte[0]);
+                    // O password recebe o salt mais o cifrão mais o hashedPassword concatenados convertidos em base 64.
+                    newPassword = saltBase64 + '$' + hashedBase64;
+                    user.setPassword(newPassword);
+                    repository.update(user);
+                    return true;
+                } else if (criptografia.equalsIgnoreCase("BCrypt")) {
+                    char[] passwordChar = newPassword.toCharArray();
+                    byte[] hashedPassword = PasswordHashing.hashPasswordWithBCrypt(passwordChar);
+                    newPassword = encoder.encodeToString(hashedPassword);
+                    user = new User(login, newPassword);
+                    repository.update(user);
+                    return true;
+                }
             }
         }
         return false;
@@ -60,15 +98,22 @@ public class UserService {
         if (user == null) {
             throw new InvalidLoginException("O login ou a senha estão equivocados!");
         } else {
-            String[] sp = user.getPassword().split("\\$");
+            if (criptografia.equalsIgnoreCase("PBKDF2")) {
+                String[] sp = user.getPassword().split("\\$");
 
-            byte[] hashedPassword = decoder.decode(sp[1]);
-            byte[] salt = decoder.decode(sp[0]);
-            char[] passwordChar = password.toCharArray();
+                byte[] hashedPassword = decoder.decode(sp[1]);
+                byte[] salt = decoder.decode(sp[0]);
+                char[] passwordChar = password.toCharArray();
 
-            return PasswordHashing.verifyPasswordWithPBKDF2(passwordChar, salt, "PBKDF2WithHmacSHA512", iterations, keyLength, hashedPassword);
+                return PasswordHashing.verifyPasswordWithPBKDF2(passwordChar, salt, "PBKDF2WithHmacSHA512", iterations, keyLength, hashedPassword);
+            } else if (criptografia.equalsIgnoreCase("BCrypt")) {
+                byte[] hashedPassword = decoder.decode(user.getPassword());
+                char[] passwordChar = password.toCharArray();
+
+                return PasswordHashing.verifyPasswordWithBCrypt(passwordChar, hashedPassword);
+            }
         }
+        return false;
     }
-
 
 }
